@@ -13,13 +13,15 @@ db.exec(`
 
     CREATE TABLE IF NOT EXISTS mensagens (
         id TEXT PRIMARY KEY,
+        codigo TEXT UNIQUE NOT NULL,
         conteudo_criptografado TEXT NOT NULL,
         iv TEXT NOT NULL,
-        criado_por INTEGER NOT NULL,
+        criado_por INTEGER,
         lida INTEGER DEFAULT 0,
         criado_em DATETIME DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (criado_por) REFERENCES usuarios(id)
     );
+
 `)
 
 module.exports = db

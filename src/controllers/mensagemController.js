@@ -32,16 +32,19 @@ const criarMensagem = (req, res) => {
 
     const { iv, conteudo: criptografado } = criptografar(conteudo)
     const id = uuidv4()
+    const codigo = gerarCodigoCurto()
 
     const stmt = db.prepare(`
-        INSERT INTO mensagens (id, conteudo_criptografado, iv, criado_por)
-        VALUES (?, ?, ?, ?)
+        INSERT INTO mensagens (id, codigo, conteudo_criptografado, iv, criado_por)
+        VALUES (?, ?, ?, ?, ?)
     `)
-    stmt.run(id, criptografado, iv, req.usuario.id)
+
+    const criado_por = req.usuario ? req.usuario.id : null
+    stmt.run(id, codigo, criptografado, iv, criado_por)
 
     res.status(201).json({
         mensagem: 'Dead drop criado com sucesso',
-        id,
+        codigo,
         aviso: 'Esta mensagem será destruída após a primeira leitura'
     })
 }
@@ -49,7 +52,7 @@ const criarMensagem = (req, res) => {
 const lerMensagem = (req, res) => {
     const { id } = req.params
 
-    const mensagem = db.prepare('SELECT * FROM mensagens WHERE id = ?').get(id)
+    const mensagem = db.prepare('SELECT * FROM mensagens WHERE codigo = ?').get(id)
 
     if (!mensagem) {
         return res.status(404).json({ erro: 'Mensagem não encontrada ou já foi destruída' })
@@ -61,7 +64,7 @@ const lerMensagem = (req, res) => {
 
     const conteudo = descriptografar(mensagem.conteudo_criptografado, mensagem.iv)
 
-    db.prepare('UPDATE mensagens SET lida = 1 WHERE id = ?').run(id)
+    db.prepare('UPDATE mensagens SET lida = 1 WHERE codigo = ?').run(id)
 
     res.json({
         conteudo,
@@ -76,6 +79,16 @@ const minhasMensagens = (req, res) => {
     `).all(req.usuario.id)
 
     res.json(mensagens)
+}
+
+const gerarCodigoCurto = () => {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
+    let codigo = ''
+    for (let i = 0; i < 8; i++) {
+        if (i === 4) codigo += '-'
+        codigo += chars[Math.floor(Math.random() * chars.length)]
+    }
+    return codigo
 }
 
 module.exports = { criarMensagem, lerMensagem, minhasMensagens }

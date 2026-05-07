@@ -1,6 +1,30 @@
 const crypto = require('crypto')
 const { v4: uuidv4 } = require('uuid')
 const db = require('../models/database')
+const multer = require('multer')
+const fs = require('fs')
+const path = require('path')
+
+const storage = multer.diskStorage({
+    destination: (req, file, cb) => {
+        cb(null, 'public/uploads/')
+    },
+    filename: (req, file, cb) => {
+        const ext = path.extname(file.originalname)
+        cb(null, uuidv4() + ext)
+    }
+})
+
+const upload = multer({
+    storage,
+    limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
+    fileFilter: (req, file, cb) => {
+        const permitidos = /jpeg|jpg|png|gif|pdf|txt/
+        const ext = permitidos.test(path.extname(file.originalname).toLowerCase())
+        if (ext) cb(null, true)
+        else cb(new Error('Tipo de arquivo não permitido'))
+    }
+})
 
 const ALGORITMO = 'aes-256-cbc'
 const CHAVE = crypto.scryptSync(process.env.JWT_SECRET, 'salt', 32)
@@ -24,23 +48,28 @@ const descriptografar = (conteudoHex, ivHex) => {
 }
 
 const criarMensagem = (req, res) => {
-    const { conteudo } = req.body
+    const conteudo = req.body.conteudo || ''
+    const arquivo = req.file || null
 
-    if (!conteudo) {
-        return res.status(400).json({ erro: 'Conteúdo é obrigatório' })
+    if (!conteudo && !arquivo) {
+        return res.status(400).json({ erro: 'Mensagem ou arquivo é obrigatório' })
     }
 
-    const { iv, conteudo: criptografado } = criptografar(conteudo)
+    const textoParaCriptografar = conteudo || ' '
+    const { iv, conteudo: criptografado } = criptografar(textoParaCriptografar)
     const id = uuidv4()
     const codigo = gerarCodigoCurto()
 
     const stmt = db.prepare(`
-        INSERT INTO mensagens (id, codigo, conteudo_criptografado, iv, criado_por)
-        VALUES (?, ?, ?, ?, ?)
+        INSERT INTO mensagens (id, codigo, conteudo_criptografado, iv, arquivo, arquivo_nome, criado_por)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
     `)
 
     const criado_por = req.usuario ? req.usuario.id : null
-    stmt.run(id, codigo, criptografado, iv, criado_por)
+    const arquivoPath = arquivo ? arquivo.filename : null
+    const arquivoNome = arquivo ? arquivo.originalname : null
+
+    stmt.run(id, codigo, criptografado, iv, arquivoPath, arquivoNome, criado_por)
 
     res.status(201).json({
         mensagem: 'Dead drop criado com sucesso',
@@ -66,11 +95,23 @@ const lerMensagem = (req, res) => {
 
     db.prepare('UPDATE mensagens SET lida = 1 WHERE codigo = ?').run(id)
 
-    res.json({
-        conteudo,
+    const resposta = {
+        conteudo: conteudo.trim(),
         criado_em: mensagem.criado_em,
         aviso: 'Esta mensagem foi destruída e não poderá ser lida novamente'
-    })
+    }
+
+    if (mensagem.arquivo) {
+        resposta.arquivo = mensagem.arquivo
+        resposta.arquivo_nome = mensagem.arquivo_nome
+
+        setTimeout(() => {
+            const filePath = path.join(__dirname, '../../public/uploads/', mensagem.arquivo)
+            if (fs.existsSync(filePath)) fs.unlinkSync(filePath)
+        }, 60000)
+    }
+
+    res.json(resposta)
 }
 
 const minhasMensagens = (req, res) => {
@@ -91,4 +132,4 @@ const gerarCodigoCurto = () => {
     return codigo
 }
 
-module.exports = { criarMensagem, lerMensagem, minhasMensagens }
+module.exports = { criarMensagem, lerMensagem, minhasMensagens, upload }

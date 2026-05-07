@@ -161,6 +161,10 @@
             font-size: 0.95rem;
             line-height: 1.6;
             white-space: pre-wrap;
+            -webkit-user-select: none;
+            -moz-user-select: none;
+            -ms-user-select: none;
+            user-select: none;
         }
 
         #erro-leitura {
@@ -169,6 +173,7 @@
             margin-top: 10px;
             letter-spacing: 1px;
         }
+
     </style>
 </head>
 <body>
@@ -176,7 +181,14 @@
         <h1>Dead Drop</h1>
         <p class="subtitulo">// mensagem criptografada. autodestruição após leitura.</p>
 
-        <textarea id="texto" placeholder="Escreva sua mensagem secreta..."></textarea>
+        <textarea id="texto" placeholder="Escreva sua mensagem..."></textarea>
+
+        <div style="margin-top: 12px;">
+            <label style="color:#6e7681; font-size:0.8rem; letter-spacing:1px;">// ANEXAR ARQUIVO (opcional, máx 5MB)</label>
+            <input type="file" id="arquivo" accept=".jpg,.jpeg,.png,.gif,.pdf,.txt"
+                style="display:block; margin-top:8px; color:#c9d1d9; font-family:'Courier New',monospace; font-size:0.8rem;" />
+        </div>
+
         <button onclick="criarMensagem()">Criar Dead Drop</button>
 
         <div id="resultado">
@@ -193,25 +205,40 @@
             </div>
             <div id="erro-leitura"></div>
             <div id="conteudo-mensagem"></div>
+            <div id="arquivo-mensagem" style="display:none; margin-top:12px;"></div>
+            <div id="container-tempo" style="display:none; margin-top:8px;">
+                <div style="background:#21262d; border-radius:4px; height:3px; width:100%;">
+                    <div id="barra-tempo" style="background:#f85149; height:3px; width:0%; border-radius:4px;"></div>
+                </div>
+                <p style="color:#6e7681; font-size:0.7rem; margin-top:4px; letter-spacing:1px;">// mensagem será destruída ao fim do tempo</p>
+            </div>
         </div>
     </div>
 
     <script>
         async function criarMensagem() {
             const texto = document.getElementById('texto').value.trim()
-            if (!texto) return
+            const arquivo = document.getElementById('arquivo').files[0]
+
+            if (!texto && !arquivo) {
+                alert('Escreva uma mensagem ou anexe um arquivo')
+                return
+            }
+
+            const formData = new FormData()
+            if (texto) formData.append('conteudo', texto)
+            if (arquivo) formData.append('arquivo', arquivo)
 
             const resposta = await fetch('/mensagem', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ conteudo: texto })
+                body: formData
             })
 
             const dados = await resposta.json()
-
             document.getElementById('codigo-gerado').textContent = dados.codigo
             document.getElementById('resultado').style.display = 'block'
             document.getElementById('texto').value = ''
+            document.getElementById('arquivo').value = ''
         }
 
         async function lerMensagem() {
@@ -221,6 +248,7 @@
 
             erro.textContent = ''
             conteudo.style.display = 'none'
+            conteudo.style.filter = 'none'
 
             if (!codigo) return
 
@@ -232,13 +260,68 @@
                 return
             }
 
-            conteudo.textContent = dados.conteudo
-            conteudo.style.display = 'block'
-        }
+            if (dados.conteudo) {
+                conteudo.textContent = dados.conteudo
+                conteudo.style.display = 'block'
+            }
 
-        document.getElementById('input-codigo').addEventListener('keydown', (e) => {
-            if (e.key === 'Enter') lerMensagem()
+            const arquivoDiv = document.getElementById('arquivo-mensagem')
+            arquivoDiv.innerHTML = ''
+            arquivoDiv.style.display = 'none'
+
+            if (dados.arquivo) {
+                const ext = dados.arquivo_nome.split('.').pop().toLowerCase()
+                if (['jpg','jpeg','png','gif'].includes(ext)) {
+                    arquivoDiv.innerHTML = `
+                        <p style="color:#6e7681; font-size:0.75rem; margin-bottom:8px;">// ARQUIVO ANEXADO</p>
+                        <img src="/mensagem/arquivo/${dados.arquivo}" style="max-width:100%; border-radius:8px;" />
+                    `
+                } else {
+                    arquivoDiv.innerHTML = `
+                        <p style="color:#6e7681; font-size:0.75rem; margin-bottom:8px;">// ARQUIVO ANEXADO</p>
+                        <a href="/mensagem/arquivo/${dados.arquivo}" target="_blank"
+                            style="color:#58a6ff; font-family:'Courier New',monospace; font-size:0.9rem;">
+                            📎 ${dados.arquivo_nome}
+                        </a>
+                    `
+                }
+                arquivoDiv.style.display = 'block'
+            }
+
+            const tempoTexto = dados.conteudo ? dados.conteudo.length * 1000 : 0
+            const tempoArquivo = dados.arquivo ? 60000 : 0
+            const tempoTotal = Math.max(tempoTexto, tempoArquivo, 10000)
+
+            const barra = document.getElementById('barra-tempo')
+            const container = document.getElementById('container-tempo')
+            container.style.display = 'block'
+            barra.style.transition = `width ${tempoTotal}ms linear`
+            barra.style.width = '100%'
+
+            setTimeout(() => { barra.style.width = '0%' }, 100)
+
+            setTimeout(() => {
+                if (dados.conteudo) {
+                    conteudo.style.filter = 'blur(12px)'
+                    conteudo.textContent = '// mensagem destruída'
+                }
+                arquivoDiv.innerHTML = '<p style="color:#f85149; font-size:0.8rem;">// arquivo destruído</p>'
+                container.style.display = 'none'
+                erro.textContent = `// exibida por ${Math.round(tempoTotal / 1000)} segundos`
+            }, tempoTotal)
+        }
+        
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden) {
+                const conteudo = document.getElementById('conteudo-mensagem')
+                if (conteudo.style.display === 'block') {
+                    conteudo.style.filter = 'blur(12px)'
+                }
+            } else {
+                document.getElementById('conteudo-mensagem').style.filter = 'none'
+            }
         })
+
     </script>
 </body>
 </html>

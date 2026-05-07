@@ -16,6 +16,8 @@ db.exec(`
         codigo TEXT UNIQUE NOT NULL,
         conteudo_criptografado TEXT NOT NULL,
         iv TEXT NOT NULL,
+        arquivo TEXT,
+        arquivo_nome TEXT,
         criado_por INTEGER,
         lida INTEGER DEFAULT 0,
         criado_em DATETIME DEFAULT CURRENT_TIMESTAMP,

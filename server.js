@@ -7,7 +7,13 @@ const app = express()
 app.use(express.json())
 
 const path = require('path')
-app.use(express.static(path.join(__dirname, 'public')))
+app.use(express.static(path.join(__dirname, 'public'), {
+    index: 'index.html'
+}))
+
+app.use('/uploads', (req, res) => {
+    res.status(403).json({ erro: 'Acesso negado' })
+})
 
 const authRoutes = require('./src/routes/authRoutes')
 const mensagemRoutes = require('./src/routes/mensagemRoutes')

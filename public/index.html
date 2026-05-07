@@ -337,6 +337,14 @@
                 erro.textContent = `// exibida por ${Math.round(tempoTotal / 1000)} segundos`
             }, tempoTotal)
         }
+
+        document.getElementById('input-codigo').addEventListener('input', function(e) {
+                let valor = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '')
+                if (valor.length > 4) {
+                    valor = valor.slice(0, 4) + '-' + valor.slice(4, 8)
+                }
+                e.target.value = valor
+            })
         
         document.addEventListener('visibilitychange', () => {
             if (document.hidden) {
